@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Live Multi-Sport Watchability Dashboard</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 24px; margin: 0; }
+    h1 { font-size: 1.5rem; margin-bottom: 4px; }
+    .subtitle { color: #94a3b8; margin-bottom: 24px; font-size: 0.9rem; }
+    
+    .top-recommendation { max-width: 780px; margin-bottom: 28px; background: linear-gradient(135deg, #1e1b4b, #1e293b); border: 2px solid #6366f1; border-radius: 10px; padding: 18px; }
+    .top-rec-header { font-size: 0.8rem; font-weight: 800; color: #818cf8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+
+    .sport-section { max-width: 780px; margin-bottom: 28px; }
+    .sport-title { font-size: 1.15rem; font-weight: 700; color: #cbd5e1; border-bottom: 1px solid #334155; padding-bottom: 6px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; }
+    .sport-count { font-size: 0.8rem; color: #64748b; font-weight: 600; }
+
+    .card-list { display: flex; flex-direction: column; gap: 10px; }
+    .game-card { background: #1e293b; border-radius: 8px; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #475569; }
+    
+    .game-card.tier-upset { border-left-color: #ef4444; background: #1f1d2b; }
+    .game-card.tier-heavyweight { border-left-color: #a855f7; background: #1d172e; }
+    .game-card.tier-leverage { border-left-color: #f59e0b; }
+    .game-card.tier-shootout { border-left-color: #3b82f6; }
+    
+    .team-line { font-size: 1rem; font-weight: 600; display: flex; align-items: center; }
+    .rank { color: #38bdf8; font-size: 0.8rem; margin-right: 4px; }
+    .score { margin-left: 8px; font-weight: 700; }
+    
+    .meta-line { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+    .clock-badge { font-size: 0.82rem; color: #94a3b8; }
+    .broadcast-badge { font-size: 0.72rem; font-weight: 700; background: #334155; color: #38bdf8; padding: 2px 7px; border-radius: 4px; }
+    
+    .score-box { text-align: right; min-width: 85px; }
+    .es-value { font-size: 1.35rem; font-weight: 700; color: #38bdf8; }
+    .es-label { font-size: 0.65rem; color: #64748b; text-transform: uppercase; }
+    
+    .badge { font-size: 0.68rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; }
+    .badge-upset { background: #dc2626; color: white; }
+    .badge-heavyweight { background: #7e22ce; color: white; }
+    .badge-tight { background: #d97706; color: white; }
+    .badge-shootout { background: #2563eb; color: white; }
+    .badge-close { background: #059669; color: white; }
+  </style>
+</head>
+<body>
+
+  <h1>Live Sports Router</h1>
+  <div class="subtitle">Ranked in real time by category across NFL, CFB, MLB, NBA, and NHL.</div>
+
+  <div id="top-pick-container"></div>
+  <div id="sports-container">Loading live feeds...</div>
+
+  <script>
+    const SPORT_FEEDS = [
+      { id: 'nfl', name: 'NFL', url: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', type: 'football' },
+      { id: 'cfb', name: 'College Football', url: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80', type: 'football' },
+      { id: 'mlb', name: 'MLB', url: 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard', type: 'baseball' },
+      { id: 'nba', name: 'NBA', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard', type: 'basketball' },
+      { id: 'cbb', name: 'College Basketball', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50', type: 'basketball' },
+      { id: 'nhl', name: 'NHL', url: 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard', type: 'hockey' }
+    ];
+
+    function extractBroadcast(competition) {
+      if (!competition.broadcasts || competition.broadcasts.length === 0) return 'Local / Stream';
+      const names = competition.broadcasts.flatMap(b => b.names || []);
+      return names.length > 0 ? names.join(', ') : 'Local / Stream';
+    }
+
+    function parseClock(clockStr) {
+      if (!clockStr) return 0;
+      const parts = clockStr.split(':').map(Number);
+      return parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+    }
+
+    function evaluateGame(game, sportMeta) {
+      let score = 0;
+      let tags = [];
+
+      const comp = game.competitions[0];
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+
+      const homeScore = parseInt(home.score || 0, 10);
+      const awayScore = parseInt(away.score || 0, 10);
+      const margin = Math.abs(homeScore - awayScore);
+      const totalPoints = homeScore + awayScore;
+
+      const homeRank = home.curatedRank?.current <= 25 ? home.curatedRank.current : null;
+      const awayRank = away.curatedRank?.current <= 25 ? away.curatedRank.current : null;
+      const period = game.status.period || 1;
+      const clockSeconds = parseClock(game.status.displayClock);
+
+      // --- 1. BASELINE COMPETITIVENESS FLOOR (Prevents Zero Scores) ---
+      // Gives points to any close game regardless of quarter or rankings
+      if (sportMeta.type === 'football') {
+        if (margin <= 3) score += 30;
+        else if (margin <= 8) score += 20;
+        else if (margin <= 14) score += 10;
+      } else if (sportMeta.type === 'baseball') {
+        if (margin === 0) score += 35;
+        else if (margin === 1) score += 30;
+        else if (margin <= 3) score += 20;
+      } else if (sportMeta.type === 'basketball') {
+        if (margin <= 5) score += 30;
+        else if (margin <= 10) score += 15;
+      } else if (sportMeta.type === 'hockey') {
+        if (margin === 0) score += 35;
+        else if (margin === 1) score += 25;
+      }
+
+      // --- 2. PRESTIGE / TOP RANKINGS (College only) ---
+      if (homeRank && awayRank) {
+        let prestige = 35;
+        if (homeRank <= 10 && awayRank <= 10) {
+          prestige += 30;
+          tags.push('TOP 10 SHOWDOWN');
+        } else {
+          tags.push('TOP MATCHUP');
+        }
+        score += prestige;
+      }
+
+      // --- 3. UPSET ALERT (CFB / CBB) ---
+      const homeUpset = !homeRank && awayRank && (homeScore > awayScore);
+      const awayUpset = !awayRank && homeRank && (awayScore > homeScore);
+      if ((homeUpset || awayUpset) && period >= 2) {
+        score += 50;
+        if (period >= 4) score += 30;
+        tags.push('UPSET ALERT');
+      }
+
+      // --- 4. SPORT-SPECIFIC LEVERAGE & SHOOTOUTS ---
+      if (sportMeta.type === 'football') {
+        const totalSecRemaining = Math.max(0, (4 - period) * 900 + clockSeconds);
+        // Late game leverage
+        if (period >= 3 && margin <= 10) {
+          const timeFactor = Math.max(1, totalSecRemaining / 60);
+          const leverage = (100 / ((margin + 1) * Math.sqrt(timeFactor))) * 2.2;
+          score += leverage;
+          if (margin <= 8 && period === 4) tags.push('HIGH LEVERAGE');
+        }
+        // Shootouts
+        if (period >= 2) {
+          const elapsed = Math.max(15, (period - 1) * 15 + (15 - clockSeconds / 60));
+          const pace = totalPoints / elapsed;
+          if (pace > 1.1 && Math.min(homeScore, awayScore) >= 10 && margin <= 14) {
+            score += pace * 8;
+            tags.push('SHOOTOUT');
+          }
+        }
+      } 
+      else if (sportMeta.type === 'baseball') {
+        // Late inning drama
+        if (period >= 7 && margin <= 2) {
+          score += (period >= 9 ? 45 : 25);
+          tags.push('LATE INNINGS');
+        }
+        if (period > 9) {
+          score += 45;
+          tags.push('EXTRA INNINGS');
+        }
+        // High scoring
+        if (totalPoints >= 10 && margin <= 3) {
+          score += 20;
+          tags.push('SHOOTOUT');
+        }
+      }
+      else if (sportMeta.type === 'basketball') {
+        if (period >= 4 && clockSeconds <= 300 && margin <= 6) {
+          score += 55 + (6 - margin) * 5;
+          tags.push('CLUTCH TIME');
+        }
+        if (period > 4) {
+          score += 45;
+          tags.push('OVERTIME');
+        }
+      }
+      else if (sportMeta.type === 'hockey') {
+        if (period === 3 && margin <= 1) {
+          score += 45;
+          tags.push('LATE 3RD');
+        }
+        if (period > 3) {
+          score += 50;
+          tags.push('OVERTIME');
+        }
+      }
+
+      return {
+        sportId: sportMeta.id,
+        sportName: sportMeta.name,
+        score: Math.round(score),
+        tags: tags,
+        broadcast: extractBroadcast(comp),
+        home: { name: home.team.shortDisplayName, rank: homeRank, score: homeScore },
+        away: { name: away.team.shortDisplayName, rank: awayRank, score: awayScore },
+        clock: game.status.type.detail
+      };
+    }
+
+    async function updateDashboard() {
+      try {
+        const fetchPromises = SPORT_FEEDS.map(sport => 
+          fetch(sport.url)
+            .then(res => res.json())
+            .then(data => ({ data, sport }))
+            .catch(() => null)
+        );
+
+        const results = await Promise.allSettled(fetchPromises);
+        let groupedGames = {};
+        let allGamesFlat = [];
+
+        SPORT_FEEDS.forEach(s => groupedGames[s.id] = { name: s.name, games: [] });
+
+        results.forEach(res => {
+          if (res.status === 'fulfilled' && res.value && res.value.data.events) {
+            const active = res.value.data.events.filter(e => e.status.type.state === 'in');
+            active.forEach(g => {
+              const evaluated = evaluateGame(g, res.value.sport);
+              groupedGames[res.value.sport.id].games.push(evaluated);
+              allGamesFlat.push(evaluated);
+            });
+          }
+        });
+
+        // Sort each category internally
+        Object.keys(groupedGames).forEach(id => {
+          groupedGames[id].games.sort((a, b) => b.score - a.score);
+        });
+
+        allGamesFlat.sort((a, b) => b.score - a.score);
+
+        renderTopPick(allGamesFlat[0]);
+        renderCategories(groupedGames);
+      } catch (err) {
+        console.error("Error updating dashboard", err);
+      }
+    }
+
+    function renderCard(g) {
+      let cardClass = '';
+      if (g.tags.includes('UPSET ALERT')) cardClass = 'tier-upset';
+      else if (g.tags.some(t => t.includes('TOP'))) cardClass = 'tier-heavyweight';
+      else if (g.tags.some(t => ['HIGH LEVERAGE', 'CLUTCH TIME', 'LATE INNINGS', 'LATE 3RD', 'EXTRA INNINGS', 'OVERTIME'].includes(t))) cardClass = 'tier-leverage';
+      else if (g.tags.includes('SHOOTOUT')) cardClass = 'tier-shootout';
+
+      return `
+        <div class="game-card ${cardClass}">
+          <div>
+            <div class="team-line">
+              ${g.away.rank ? `<span class="rank">#${g.away.rank}</span>` : ''}${g.away.name}
+              <span class="score">${g.away.score}</span>
+            </div>
+            <div class="team-line">
+              ${g.home.rank ? `<span class="rank">#${g.home.rank}</span>` : ''}${g.home.name}
+              <span class="score">${g.home.score}</span>
+            </div>
+            
+            <div class="meta-line">
+              <span class="clock-badge">${g.clock}</span>
+              <span class="broadcast-badge">${g.broadcast}</span>
+            </div>
+
+            <div style="margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap;">
+              ${g.tags.map(t => {
+                let badgeClass = 'badge-tight';
+                if (t === 'UPSET ALERT') badgeClass = 'badge-upset';
+                if (t.includes('TOP')) badgeClass = 'badge-heavyweight';
+                if (t === 'SHOOTOUT') badgeClass = 'badge-shootout';
+                return `<span class="badge ${badgeClass}">${t}</span>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="score-box">
+            <div class="es-value">${g.score}</div>
+            <div class="es-label">Watch Score</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTopPick(topGame) {
+      const container = document.getElementById('top-pick-container');
+      if (!topGame) {
+        container.innerHTML = '';
+        return;
+      }
+      container.innerHTML = `
+        <div class="top-recommendation">
+          <div class="top-rec-header">🔥 Top Game to Watch Right Now (${topGame.sportName})</div>
+          ${renderCard(topGame)}
+        </div>
+      `;
+    }
+
+    function renderCategories(groupedGames) {
+      const container = document.getElementById('sports-container');
+      let html = '';
+      let totalActive = 0;
+
+      Object.keys(groupedGames).forEach(id => {
+        const sport = groupedGames[id];
+        if (sport.games.length > 0) {
+          totalActive += sport.games.length;
+          html += `
+            <div class="sport-section">
+              <div class="sport-title">
+                <span>${sport.name}</span>
+                <span class="sport-count">${sport.games.length} Live</span>
+              </div>
+              <div class="card-list">
+                ${sport.games.map(renderCard).join('')}
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      if (totalActive === 0) {
+        container.innerHTML = '<div style="color: #94a3b8;">No active live games across any sports right now. Check back during game windows!</div>';
+      } else {
+        container.innerHTML = html;
+      }
+    }
+
+    updateDashboard();
+    setInterval(updateDashboard, 30000);
+  </script>
+</body>
+</html>
