@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live Sports Hype Tracker</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      padding: 16px;
+      margin: 0;
+    }
+    
+    header { max-width: 680px; margin: 0 auto 20px auto; }
+    h1 { font-size: 1.45rem; font-weight: 800; margin: 0 0 4px 0; letter-spacing: -0.01em; color: #f1f5f9; }
+    .subtitle { color: #94a3b8; font-size: 0.85rem; line-height: 1.4; }
+
+    .main-wrap { max-width: 680px; margin: 0 auto; }
+
+    /* Top Pick Highlight */
+    .top-recommendation {
+      margin-bottom: 24px;
+      background: linear-gradient(145deg, #1e1b4b, #111827);
+      border: 2px solid #6366f1;
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 20px -4px rgba(99, 102, 241, 0.25);
+    }
+    .top-rec-header {
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: #a5b4fc;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+
+    /* Win Probability Meter (Top Game Only) */
+    .win-prob-container {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .win-prob-labels {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-bottom: 5px;
+      color: #cbd5e1;
+    }
+    .win-prob-bar {
+      height: 8px;
+      background: #334155;
+      border-radius: 999px;
+      overflow: hidden;
+      display: flex;
+    }
+    .win-prob-away {
+      background: #38bdf8;
+      height: 100%;
+      transition: width 0.4s ease;
+    }
+    .win-prob-home {
+      background: #818cf8;
+      height: 100%;
+      transition: width 0.4s ease;
+    }
+
+    /* Sections */
+    .sport-section { margin-bottom: 24px; }
+    .sport-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #cbd5e1;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 6px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sport-count { font-size: 0.75rem; color: #64748b; font-weight: 600; }
+
+    /* Compact Cards: Left-to-Right Layout */
+    .card-list { display: flex; flex-direction: column; gap: 8px; }
+    .game-card {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      border-left: 4px solid #475569;
+      gap: 12px;
+    }
+    
+    .game-card.tier-upset { border-left-color: #ef4444; background: #1c1924; }
+    .game-card.tier-heavyweight { border-left-color: #a855f7; background: #1b172a; }
+    .game-card.tier-leverage { border-left-color: #f59e0b; }
+    .game-card.tier-shootout { border-left-color: #3b82f6; }
+    .game-card.tier-rivalry { border-left-color: #eab308; }
+    .game-card.tier-ot { border-left-color: #ec4899; }
+
+    /* 1. Left: Teams & Score */
+    .matchup-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 140px;
+      flex-shrink: 0;
+    }
+    .team-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .team-name-cell {
+      display: flex;
+      align-items: center;
+      max-width: 110px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .rank { color: #38bdf8; font-size: 0.75rem; margin-right: 3px; font-weight: 700; }
+    .score-num { font-weight: 700; font-size: 1rem; color: #f8fafc; }
+
+    /* 2. Middle: Clock, Network, Badges */
+    .game-details {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+    }
+    .meta-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .clock-badge { font-size: 0.78rem; color: #94a3b8; font-weight: 600; }
+    .broadcast-badge { font-size: 0.68rem; font-weight: 700; background: #334155; color: #38bdf8; padding: 1px 6px; border-radius: 4px; }
+    
+    .badge-wrap { display: flex; gap: 4px; flex-wrap: wrap; }
+    .badge { font-size: 0.65rem; font-weight: 700; padding: 2px 5px; border-radius: 4px; text-transform: uppercase; }
+    .badge-upset { background: #dc2626; color: white; }
+    .badge-heavyweight { background: #7e22ce; color: white; }
+    .badge-tight { background: #d97706; color: white; }
+    .badge-shootout { background: #2563eb; color: white; }
+    .badge-weather { background: #0284c7; color: white; }
+    .badge-rivalry { background: #ca8a04; color: white; }
+    .badge-comeback { background: #16a34a; color: white; }
+    .badge-ot { background: #db2777; color: white; }
+
+    /* 3. Right: Divider & Hype Score */
+    .score-divider {
+      width: 1px;
+      height: 38px;
+      background: #334155;
+      flex-shrink: 0;
+    }
+
+    .watch-score-box {
+      text-align: center;
+      min-width: 52px;
+      flex-shrink: 0;
+    }
+    .fire-row { font-size: 0.72rem; min-height: 14px; line-height: 1; }
+    .ws-number { font-size: 1.18rem; font-weight: 800; color: #38bdf8; line-height: 1.1; }
+    .ws-title { font-size: 0.58rem; color: #64748b; text-transform: uppercase; font-weight: 700; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Live Sports Hype Tracker</h1>
+    <div class="subtitle">Finding the best live action in pro & college football, basketball, baseball, hockey, and soccer. Games are ranked in real time by clock scarcity, score margin, historic rivalries, sudden death, and chaos factors.</div>
+  </header>
+
+  <div class="main-wrap">
+    <div id="top-pick-container"></div>
+    <div id="sports-container">Loading live feeds...</div>
+  </div>
+
+  <script>
+    // Comprehensive catalog of ESPN live public endpoints
+    const SPORT_FEEDS = [
+      { id: 'nfl', name: 'NFL', url: 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard', type: 'football' },
+      { id: 'cfb', name: 'College Football', url: 'https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?groups=80', type: 'football' },
+      { id: 'mlb', name: 'MLB', url: 'https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard', type: 'baseball' },
+      { id: 'college-baseball', name: 'College Baseball', url: 'https://site.api.espn.com/apis/site/v2/sports/baseball/college-baseball/scoreboard', type: 'baseball' },
+      { id: 'nba', name: 'NBA', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard', type: 'basketball' },
+      { id: 'wnba', name: 'WNBA', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/wnba/scoreboard', type: 'basketball' },
+      { id: 'cbb', name: 'Men\'s College Hoops', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?groups=50', type: 'basketball' },
+      { id: 'wcb', name: 'Women\'s College Hoops', url: 'https://site.api.espn.com/apis/site/v2/sports/basketball/womens-college-basketball/scoreboard?groups=50', type: 'basketball' },
+      { id: 'nhl', name: 'NHL', url: 'https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard', type: 'hockey' },
+      { id: 'epl', name: 'Premier League', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard', type: 'soccer' },
+      { id: 'ucl', name: 'Champions League', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.champions/scoreboard', type: 'soccer' },
+      { id: 'mls', name: 'MLS', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/usa.1/scoreboard', type: 'soccer' },
+      { id: 'laliga', name: 'La Liga', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/esp.1/scoreboard', type: 'soccer' },
+      { id: 'bundesliga', name: 'Bundesliga', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/ger.1/scoreboard', type: 'soccer' },
+      { id: 'seriea', name: 'Serie A', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/ita.1/scoreboard', type: 'soccer' },
+      { id: 'ligamx', name: 'Liga MX', url: 'https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/scoreboard', type: 'soccer' }
+    ];
+
+    // Storied rivalries catalog (normalized names)
+    const RIVALRY_PAIRS = [
+      // CFB & CBB
+      ['michigan', 'ohio state'], ['alabama', 'auburn'], ['army', 'navy'],
+      ['texas', 'oklahoma'], ['florida', 'georgia'], ['usc', 'ucla'],
+      ['notre dame', 'usc'], ['duke', 'north carolina'], ['kentucky', 'louisville'],
+      ['kansas', 'missouri'], ['indiana', 'purdue'], ['oregon', 'washington'],
+      ['arkansas', 'texas a&m'], ['arkansas', 'lsu'], ['ole miss', 'mississippi state'],
+      // NFL
+      ['packers', 'bears'], ['steelers', 'ravens'], ['cowboys', 'eagles'],
+      ['chiefs', 'raiders'], ['49ers', 'seahawks'],
+      // MLB
+      ['yankees', 'red sox'], ['dodgers', 'giants'], ['cubs', 'cardinals'],
+      // NBA & NHL
+      ['celtics', 'lakers'], ['warriors', 'cavaliers'], ['canadiens', 'bruins'],
+      ['rangers', 'islanders'], ['penguins', 'flyers'],
+      // Soccer
+      ['barcelona', 'real madrid'], ['arsenal', 'tottenham'], ['liverpool', 'manchester united'],
+      ['manchester city', 'liverpool'], ['celtic', 'rangers'], ['boca juniors', 'river plate'],
+      ['inter milan', 'ac milan'], ['bayern munich', 'borussia dortmund'], ['america', 'guadalajara']
+    ];
+
+    function checkRivalry(homeName, awayName) {
+      const h = (homeName || '').toLowerCase();
+      const a = (awayName || '').toLowerCase();
+      return RIVALRY_PAIRS.some(([team1, team2]) => 
+        (h.includes(team1) && a.includes(team2)) || (h.includes(team2) && a.includes(team1))
+      );
+    }
+
+    function detectComeback(comp, margin) {
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+      if (!home?.linescores || !away?.linescores) return false;
+
+      let homeCumulative = 0;
+      let awayCumulative = 0;
+      let maxDeficit = 0;
+      const count = Math.min(home.linescores.length, away.linescores.length);
+
+      for (let i = 0; i < count; i++) {
+        homeCumulative += parseInt(home.linescores[i].value || 0, 10);
+        awayCumulative += parseInt(away.linescores[i].value || 0, 10);
+        const def = Math.abs(homeCumulative - awayCumulative);
+        if (def > maxDeficit) maxDeficit = def;
+      }
+
+      return (maxDeficit >= 14 && margin <= 6);
+    }
+
+    function extractBroadcast(comp) {
+      if (!comp.broadcasts || comp.broadcasts.length === 0) return 'Local / Stream';
+      const names = comp.broadcasts.flatMap(b => b.names || []);
+      return names.length > 0 ? names.join(', ') : 'Local / Stream';
+    }
+
+    function parseClock(clockStr) {
+      if (!clockStr) return 0;
+      const parts = clockStr.split(':').map(Number);
+      return parts.length === 2 ? parts[0] * 60 + parts[1] : 0;
+    }
+
+    function getFireIcons(score) {
+      if (score >= 90) return '🔥🔥🔥🔥';
+      if (score >= 70) return '🔥🔥🔥';
+      if (score >= 45) return '🔥🔥';
+      if (score >= 25) return '🔥';
+      return '';
+    }
+
+    function extractWinProbability(comp, home, away, homeScore, awayScore) {
+      if (comp.situation?.lastPlay?.probability?.homeWinPercentage !== undefined) {
+        const homePct = Math.round(comp.situation.lastPlay.probability.homeWinPercentage * 100);
+        return { home: homePct, away: 100 - homePct };
+      }
+      if (comp.predictor?.homeTeam?.gameProjection) {
+        const homePct = Math.round(parseFloat(comp.predictor.homeTeam.gameProjection));
+        return { home: homePct, away: 100 - homePct };
+      }
+      const total = homeScore + awayScore;
+      if (total === 0) return { home: 50, away: 50 };
+      const homePct = Math.min(96, Math.max(4, Math.round((homeScore / total) * 100)));
+      return { home: homePct, away: 100 - homePct };
+    }
+
+    function evaluateGame(game, sportMeta) {
+      let score = 0;
+      let tags = [];
+
+      const comp = game.competitions[0];
+      const home = comp.competitors.find(c => c.homeAway === 'home');
+      const away = comp.competitors.find(c => c.homeAway === 'away');
+
+      const homeScore = parseInt(home.score || 0, 10);
+      const awayScore = parseInt(away.score || 0, 10);
+      const margin = Math.abs(homeScore - awayScore);
+      const totalPoints = homeScore + awayScore;
+
+      const homeRank = home.curatedRank?.current <= 25 ? home.curatedRank.current : null;
+      const awayRank = away.curatedRank?.current <= 25 ? away.curatedRank.current : null;
+      const period = game.status.period || 1;
+      const clockSeconds = parseClock(game.status.displayClock);
+      const detailStr = (game.status.type.detail || '').toUpperCase();
+
+      // --- 1. BASELINE COMPETITIVENESS FLOOR ---
+      if (sportMeta.type === 'football') {
+        if (margin <= 3) score += 30;
+        else if (margin <= 8) score += 20;
+        else if (margin <= 14) score += 10;
+      } else if (sportMeta.type === 'baseball') {
+        if (margin === 0) score += 35;
+        else if (margin === 1) score += 30;
+        else if (margin <= 3) score += 20;
+      } else if (sportMeta.type === 'basketball') {
+        if (margin <= 5) score += 30;
+        else if (margin <= 10) score += 15;
+      } else if (sportMeta.type === 'hockey' || sportMeta.type === 'soccer') {
+        if (margin === 0) score += 35;
+        else if (margin === 1) score += 25;
+      }
+
+      // --- 2. PRESTIGE / RANKED SHOWDOWN ---
+      if (homeRank && awayRank) {
+        let prestige = 35;
+        if (homeRank <= 10 && awayRank <= 10) {
+          prestige += 30;
+          tags.push('TOP 10 SHOWDOWN');
+        } else {
+          tags.push('TOP MATCHUP');
+        }
+        score += prestige;
+      }
+
+      // --- 3. UPSET ALERT (CFB / CBB / WCB) ---
+      const homeUpset = !homeRank && awayRank && (homeScore > awayScore);
+      const awayUpset = !awayRank && homeRank && (awayScore > homeScore);
+      if ((homeUpset || awayUpset) && period >= 2) {
+        score += 50;
+        if (period >= 4) score += 30;
+        tags.push('UPSET ALERT');
+      }
+
+      // --- 4. RIVALRY & BAD BLOOD FACTOR ---
+      const isRivalry = checkRivalry(home.team.displayName, away.team.displayName);
+      if (isRivalry) {
+        score += 25;
+        tags.push('🏆 RIVALRY');
+      }
+
+      // --- 5. INCLEMENT WEATHER FACTOR ---
+      if (game.weather) {
+        const cond = (game.weather.displayValue || '').toLowerCase();
+        const temp = game.weather.temperature;
+        const wind = game.weather.wind;
+
+        if (cond.includes('snow') || cond.includes('blizzard') || cond.includes('flurries')) {
+          score += 35;
+          tags.push('❄️ SNOW GAME');
+        } else if (cond.includes('heavy rain') || cond.includes('thunderstorm') || cond.includes('downpour')) {
+          score += 25;
+          tags.push('🌧️ HEAVY RAIN');
+        } else if (temp !== undefined && temp <= 22) {
+          score += 20;
+          tags.push('🥶 FREEZING');
+        } else if (wind !== undefined && wind >= 22) {
+          score += 15;
+          tags.push('💨 HIGH WIND');
+        }
+      }
+
+      // --- 6. OVERTIME / GOLDEN GOAL / SHOOTOUT ---
+      const hasOtText = /\bOT\b/.test(detailStr) || detailStr.includes('OVERTIME');
+      const isOT = hasOtText || 
+                   (sportMeta.type === 'baseball' && period > 9) || 
+                   (sportMeta.type === 'football' && period > 4) ||
+                   (sportMeta.type === 'basketball' && period > 4) ||
+                   (sportMeta.type === 'hockey' && period > 3);
+
+      const isShootout = detailStr.includes('SHOOTOUT') || /\bPK\b/.test(detailStr) || detailStr.includes('PENALTIES');
+
+      if (isShootout) {
+        score += 65;
+        tags.push('⚡ PENALTY SHOOTOUT');
+      } else if (isOT) {
+        score += 55;
+        tags.push('🔥 OVERTIME');
+      }
+
+      // --- 7. MASSIVE COMEBACK FACTOR ---
+      if (detectComeback(comp, margin)) {
+        score += 35;
+        tags.push('⚡ COMEBACK');
+      }
+
+      // --- 8. SPORT-SPECIFIC LEVERAGE & SHOOTOUT ---
+      if (sportMeta.type === 'football') {
+        const totalSecRemaining = Math.max(0, (4 - period) * 900 + clockSeconds);
+        if (period >= 3 && margin <= 10) {
+          const timeFactor = Math.max(1, totalSecRemaining / 60);
+          score += (100 / ((margin + 1) * Math.sqrt(timeFactor))) * 2.2;
+          if (margin <= 8 && period === 4) tags.push('HIGH LEVERAGE');
+        }
+        if (period >= 2) {
+          const elapsed = Math.max(15, (period - 1) * 15 + (15 - clockSeconds / 60));
+          const pace = totalPoints / elapsed;
+          if (pace > 1.1 && Math.min(homeScore, awayScore) >= 10 && margin <= 14) {
+            score += pace * 8;
+            tags.push('SHOOTOUT');
+          }
+        }
+      } else if (sportMeta.type === 'baseball') {
+        if (period >= 7 && margin <= 2) {
+          score += (period >= 9 ? 45 : 25);
+          tags.push('LATE INNINGS');
+        }
+        if (period > 9 && !tags.includes('🔥 OVERTIME')) {
+          tags.push('EXTRA INNINGS');
+        }
+      } else if (sportMeta.type === 'basketball') {
+        if (period >= 4 && clockSeconds <= 300 && margin <= 6) {
+          score += 55 + (6 - margin) * 5;
+          tags.push('CLUTCH TIME');
+        }
+      } else if (sportMeta.type === 'hockey') {
+        if (period === 3 && margin <= 1) {
+          score += 45;
+          tags.push('LATE 3RD');
+        }
+      } else if (sportMeta.type === 'soccer') {
+        if (period >= 2 && margin <= 1) {
+          score += 40;
+          if (margin === 0) tags.push('STOPPAGE THREAT');
+        }
+      }
+
+      const finalScore = Math.round(score);
+
+      return {
+        sportId: sportMeta.id,
+        sportName: sportMeta.name,
+        score: finalScore,
+        fires: getFireIcons(finalScore),
+        tags: tags,
+        broadcast: extractBroadcast(comp),
+        home: { name: home.team.shortDisplayName || home.team.displayName, rank: homeRank, score: homeScore },
+        away: { name: away.team.shortDisplayName || away.team.displayName, rank: awayRank, score: awayScore },
+        winProb: extractWinProbability(comp, home, away, homeScore, awayScore),
+        clock: game.status.type.detail
+      };
+    }
+
+    async function updateDashboard() {
+      try {
+        const fetchPromises = SPORT_FEEDS.map(sport => 
+          fetch(sport.url)
+            .then(res => res.json())
+            .then(data => ({ data, sport }))
+            .catch(() => null)
+        );
+
+        const results = await Promise.allSettled(fetchPromises);
+        let groupedGames = {};
+        let allGamesFlat = [];
+
+        SPORT_FEEDS.forEach(s => groupedGames[s.id] = { name: s.name, games: [] });
+
+        results.forEach(res => {
+          if (res.status === 'fulfilled' && res.value && res.value.data?.events) {
+            const active = res.value.data.events.filter(e => e.status.type.state === 'in');
+            active.forEach(g => {
+              const evaluated = evaluateGame(g, res.value.sport);
+              groupedGames[res.value.sport.id].games.push(evaluated);
+              allGamesFlat.push(evaluated);
+            });
+          }
+        });
+
+        Object.keys(groupedGames).forEach(id => {
+          groupedGames[id].games.sort((a, b) => b.score - a.score);
+        });
+
+        allGamesFlat.sort((a, b) => b.score - a.score);
+
+        renderTopPick(allGamesFlat[0]);
+        renderCategories(groupedGames);
+      } catch (err) {
+        console.error("Error updating live feeds", err);
+      }
+    }
+
+    function getBadgeClass(tag) {
+      if (tag === 'UPSET ALERT') return 'badge-upset';
+      if (tag.includes('TOP')) return 'badge-heavyweight';
+      if (tag === 'SHOOTOUT') return 'badge-shootout';
+      if (tag.includes('SNOW') || tag.includes('RAIN') || tag.includes('FREEZING') || tag.includes('WIND')) return 'badge-weather';
+      if (tag.includes('RIVALRY')) return 'badge-rivalry';
+      if (tag.includes('COMEBACK')) return 'badge-comeback';
+      if (tag.includes('OVERTIME') || tag.includes('SHOOTOUT') || tag.includes('EXTRA')) return 'badge-ot';
+      return 'badge-tight';
+    }
+
+    function renderCard(g) {
+      let cardClass = '';
+      if (g.tags.some(t => t.includes('OVERTIME') || t.includes('SHOOTOUT'))) cardClass = 'tier-ot';
+      else if (g.tags.includes('UPSET ALERT')) cardClass = 'tier-upset';
+      else if (g.tags.some(t => t.includes('TOP'))) cardClass = 'tier-heavyweight';
+      else if (g.tags.some(t => t.includes('RIVALRY'))) cardClass = 'tier-rivalry';
+      else if (g.tags.some(t => ['HIGH LEVERAGE', 'CLUTCH TIME', 'LATE INNINGS', 'LATE 3RD'].includes(t))) cardClass = 'tier-leverage';
+      else if (g.tags.includes('SHOOTOUT')) cardClass = 'tier-shootout';
+
+      return `
+        <div class="game-card ${cardClass}">
+          <!-- 1. LEFT: Matchup & Scores -->
+          <div class="matchup-box">
+            <div class="team-row">
+              <span class="team-name-cell">
+                ${g.away.rank ? `<span class="rank">#${g.away.rank}</span>` : ''}${g.away.name}
+              </span>
+              <span class="score-num">${g.away.score}</span>
+            </div>
+            <div class="team-row">
+              <span class="team-name-cell">
+                ${g.home.rank ? `<span class="rank">#${g.home.rank}</span>` : ''}${g.home.name}
+              </span>
+              <span class="score-num">${g.home.score}</span>
+            </div>
+          </div>
+
+          <!-- 2. MIDDLE: Clock, Channel, Tags -->
+          <div class="game-details">
+            <div class="meta-line">
+              <span class="clock-badge">${g.clock}</span>
+              <span class="broadcast-badge">${g.broadcast}</span>
+            </div>
+            <div class="badge-wrap">
+              ${g.tags.map(t => `<span class="badge ${getBadgeClass(t)}">${t}</span>`).join('')}
+            </div>
+          </div>
+
+          <!-- 3. RIGHT: Divider & Hype Score -->
+          <div class="score-divider"></div>
+
+          <div class="watch-score-box">
+            <div class="fire-row">${g.fires}</div>
+            <div class="ws-number">${g.score}</div>
+            <div class="ws-title">Hype</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderTopPick(topGame) {
+      const container = document.getElementById('top-pick-container');
+      if (!topGame) {
+        container.innerHTML = '';
+        return;
+      }
+
+      container.innerHTML = `
+        <div class="top-recommendation">
+          <div class="top-rec-header">
+            Top Game to Watch Right Now (${topGame.sportName})
+          </div>
+
+          ${renderCard(topGame)}
+
+          <div class="win-prob-container">
+            <div class="win-prob-labels">
+              <span>${topGame.away.name} ${topGame.winProb.away}%</span>
+              <span style="color: #94a3b8; font-size: 0.7rem; font-weight: normal;">Win Probability</span>
+              <span>${topGame.winProb.home}% ${topGame.home.name}</span>
+            </div>
+            <div class="win-prob-bar">
+              <div class="win-prob-away" style="width: ${topGame.winProb.away}%;"></div>
+              <div class="win-prob-home" style="width: ${topGame.winProb.home}%;"></div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderCategories(groupedGames) {
+      const container = document.getElementById('sports-container');
+      let html = '';
+      let totalActive = 0;
+
+      Object.keys(groupedGames).forEach(id => {
+        const sport = groupedGames[id];
+        if (sport.games.length > 0) {
+          totalActive += sport.games.length;
+          html += `
+            <div class="sport-section">
+              <div class="sport-title">
+                <span>${sport.name}</span>
+                <span class="sport-count">${sport.games.length} Live</span>
+              </div>
+              <div class="card-list">
+                ${sport.games.map(renderCard).join('')}
+              </div>
+            </div>
+          `;
+        }
+      });
+
+      if (totalActive === 0) {
+        container.innerHTML = '<div style="color: #94a3b8; text-align: center; padding: 30px 0;">No active games live right now. Check back during game windows!</div>';
+      } else {
+        container.innerHTML = html;
+      }
+    }
+
+    updateDashboard();
+    setInterval(updateDashboard, 30000);
+  </script>
+</body>
+</html>
